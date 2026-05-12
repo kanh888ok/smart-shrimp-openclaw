@@ -1,0 +1,37 @@
+{
+  "dataset_name": "PolicyPilot public-notice-derived desensitized outcome cases",
+  "version": "2026-05-11",
+  "important_note": "This is not a government internal approval dataset. It is a desensitized demonstration dataset derived from public notices and official policy texts.",
+  "raw_fields_not_stored": [
+    "company_name",
+    "unified_social_credit_code",
+    "legal_representative",
+    "contact_person",
+    "phone",
+    "address",
+    "bank_account",
+    "exact_contract_amount",
+    "application_document_text"
+  ],
+  "retained_fields": [
+    "case_id",
+    "policy_id",
+    "region",
+    "case_group",
+    "outcome_label",
+    "source_url"
+  ],
+  "case_id_method": "Synthetic sequential IDs by source/policy group, e.g. BJ-AIV25-DEMAND-001. The package does not contain raw company names, so IDs are not reversible.",
+  "label_definitions": {
+    "public_notice_qualified": "Entity/project appeared in a public qualification-review notice or public qualification-result attachment.",
+    "public_notice_candidate": "Entity appeared in a public拟入库/candidate list; not the same as final inclusion.",
+    "public_notice_final_included": "Entity appeared in a public final入库/inclusion announcement after objection period.",
+    "public_notice_not_included_after_objection": "Aggregate negative label inferred from official announcement that some拟入库 entities were removed after objection verification; no raw identity or failure reason is stored."
+  },
+  "recommended_use": [
+    "Demonstrate data sourcing and outcome-label design.",
+    "Calibrate product language: readiness score, not official approval probability.",
+    "Build evaluation samples for retrieval and rule consistency.",
+    "Do not train a high-stakes approval prediction model without authorized application-level data."
+  ]
+}
