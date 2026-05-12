@@ -316,11 +316,6 @@ class YieldPredictor:
 
         X_train, X_test = self.X.iloc[:split_idx], self.X.iloc[split_idx:]
         y_train, y_test = self.y.iloc[:split_idx], self.y.iloc[split_idx:]
-        self.X_train = X_train
-        self.X_test = X_test
-        self.y_train = y_train
-        self.y_test = y_test
-        self.y_true = y_test
         
         if model_type == 'random_forest':
             self.model = RandomForestRegressor(
@@ -340,7 +335,6 @@ class YieldPredictor:
         
         # 评估
         y_pred = self.model.predict(X_test)
-        self.y_pred = pd.Series(y_pred, index=y_test.index, name='预测产量 (kg)')
         self.metrics = {
             'R²': r2_score(y_test, y_pred),
             'MAE': mean_absolute_error(y_test, y_pred),

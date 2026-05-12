@@ -339,11 +339,7 @@ class YieldPredictor:
         split_idx = int(len(data) * 0.8)
         X_train, X_test = X[:split_idx], X[split_idx:]
         y_train, y_test = y[:split_idx], y[split_idx:]
-        self.X_train = X_train
-        self.X_test = X_test
-        self.y_train = y_train
-        self.y_test = y_test
-        self.y_true = y_test
+
         # 训练模型
         self.model = RandomForestRegressor(
             n_estimators=self.config['n_estimators'],

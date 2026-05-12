@@ -1,40 +1,69 @@
-# Python
+# Secrets and local configuration
+.env
+.env.*
+!.env.example
+openclaw.json
+openclaw_safe.json
+*.key
+*.secret
+*.token
+api_keys.txt
+secrets.json
+credentials.json
+
+# Python caches
 __pycache__/
 *.py[cod]
-*.pyo
-*.pyd
+*$py.class
 .pytest_cache/
 .mypy_cache/
 .ruff_cache/
-.coverage
-htmlcov/
 
 # Virtual environments
 .venv/
 venv/
-env/
 ENV/
-
-# Local secrets
-.env
-.env.*
-!.env.example
-
-# Runtime outputs
-outputs/
-outputs_public/
-*.log
-
-# Research-only third-party reference repos
-reference_repos/
-
-# OS / editor
-.DS_Store
-Thumbs.db
-.vscode/
-.idea/
+env/
 
 # Build artifacts
-dist/
 build/
+dist/
 *.egg-info/
+.eggs/
+
+# IDE / OS
+.idea/
+.vscode/
+*.swp
+*.swo
+*~
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# Runtime output
+logs/
+output/
+*.log
+*.tmp
+*.bak
+temp/
+
+# Generated reports and model binaries
+reports/generated/
+reports/*.pdf
+reports/*.docx
+models/**/*.pkl
+models/**/*.joblib
+models/**/*.pth
+models/**/*.pt
+best_model.joblib
+random_forest_model.joblib
+
+# Keep public sample data only; ignore newly generated/local datasets
+/data/*.csv
+/data/*.xlsx
+!/data/kaggle_shrimp_with_treatment.csv
+!/data/shrimp_farming_sample.xlsx
+!/data/README.md
+!/data/.gitkeep

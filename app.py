@@ -1,409 +1,1224 @@
-from __future__ import annotations
-
-import os
-from collections import Counter
-from pathlib import Path
+#!/usr/bin/env python3
+# -*- coding: utf-8 -*-
+"""
+智虾系统 - Web Dashboard
+基于 Streamlit 的交互式界面
+"""
 
 import streamlit as st
+import pandas as pd
+import numpy as np
+import plotly.express as px
+import plotly.graph_objects as go
+from plotly.subplots import make_subplots
+import sys
+from pathlib import Path
+import warnings
+warnings.filterwarnings('ignore')
 
-from src.company_parser import parse_company_profile
-from src.generator import build_application_draft, build_demo_explanation, build_material_checklist, build_pitch, build_qna
-from src.llm import LLMProvider
-from src.matcher import rank_policies
-from src.models import AnalysisReport
-from src.policy_insights import city_policy_summaries, policy_countdown, validate_policy_library
-from src.policy_loader import load_opc_policies, load_sample_policies, load_uploaded_policies
-from src.report import render_report_markdown
-from src.utils import results_to_csv
+# 添加项目路径
+sys.path.insert(0, str(Path(__file__).parent))
 
-BASE_DIR = Path(__file__).parent
-DEFAULT_COMPANY_TEXT = """
-杭州云策智能科技公司是一家 AI 初创公司，团队 8 人，主营大模型客服与企业知识库问答系统。
-公司成立于 2024 年，年营收 80 万元，研发投入占比 35%，已有 1 项软件著作权，暂无发明专利。
-产品已经完成 Demo，并在园区企业客服场景完成试点部署。
-目前希望申请算力补贴、科技型中小企业认定和创新创业资金。
-企业已准备项目计划书，但尚未准备算力合同、正式财务报表和预算说明。
-""".strip()
+from src.professional_analyzer import ShrimpDataLoader, FeatureEngineer, YieldPredictor
+from config import DATA_DIR, REPORTS_DIR
 
-COMPANY_INPUT_TEMPLATE = """
-企业名称：
-注册地区：
-所属行业：
-成立时间：
-职工总数：
-上一年度销售收入：
-资产总额：
-科技人员占比：
-研发费用占比：
-知识产权情况：如软著、专利、商标、技术成果
-产品/项目简介：
-当前进展：如 Demo、原型、上线、试点、部署情况
-客户/合同/订单/合作证明：
-已准备材料：如营业执照、项目计划书、财务报表、预算说明、真实性承诺书
-缺失或尚未准备的材料：
-是否存在重大违法/失信记录：
-希望申请的政策方向：如算力补贴、科技型中小企业、专精特新、创新创业资金
-""".strip()
+# 页面配置
+st.set_page_config(
+    page_title="对虾养殖分析系统",
+    page_icon="🦞",
+    layout="wide",
+    initial_sidebar_state="expanded"
+)
 
-INPUT_FIELD_GUIDE = [
-    ("企业基础信息", "企业名称、注册地区、成立时间、职工总数/团队规模"),
-    ("规模指标", "上一年度销售收入、资产总额"),
-    ("经营与研发", "行业方向、科技人员占比、研发费用占比"),
-    ("技术与成果", "知识产权、专利/软著、Demo、原型、上线或试点"),
-    ("业务证据", "客户案例、合同、订单、合作证明、场景落地"),
-    ("申报材料", "营业执照、项目计划书、预算、财务报表、真实性承诺"),
-    ("政策意向", "希望申请的政策类型或补贴方向"),
-]
-
-
-def _policy_library_stats(policies) -> dict:
-    regions = sorted({p.region for p in policies if p.region})
-    official_count = sum(1 for p in policies if p.official_url or str(p.source).startswith("http"))
-    verified_count = sum(1 for p in policies if p.verified)
-    max_amount = max([p.amount_max_yuan for p in policies] or [0])
-    category_counts = Counter(p.category or "未分类" for p in policies)
-    region_counts = Counter(p.region or "未标注" for p in policies)
-    return {
-        "count": len(policies),
-        "regions": regions,
-        "official_count": official_count,
-        "verified_count": verified_count,
-        "max_amount": max_amount,
-        "category_counts": category_counts,
-        "region_counts": region_counts,
+# 自定义CSS
+st.markdown("""
+<style>
+    .main-header {
+        font-size: 3rem;
+        font-weight: bold;
+        color: #1f77b4;
+        text-align: center;
+        padding: 1rem;
+        background: linear-gradient(90deg, #1f77b4 0%, #17becf 100%);
+        -webkit-background-clip: text;
+        -webkit-text-fill-color: transparent;
     }
-
-
-def _match_result_stats(results) -> dict:
-    return {
-        "total": len(results),
-        "strong": sum(1 for r in results if r.score >= 80),
-        "mid": sum(1 for r in results if 65 <= r.score < 80),
-        "weak": sum(1 for r in results if 45 <= r.score < 65),
-        "not_recommended": sum(1 for r in results if r.score < 45),
-        "actionable": sum(1 for r in results if r.score >= 45),
+    .metric-card {
+        background-color: #f0f2f6;
+        padding: 1rem;
+        border-radius: 0.5rem;
+        box-shadow: 0 2px 4px rgba(0,0,0,0.1);
     }
+    .success-box {
+        padding: 1rem;
+        border-radius: 0.5rem;
+        background-color: #d4edda;
+        border: 1px solid #c3e6cb;
+        color: #155724;
+    }
+    .warning-box {
+        padding: 1rem;
+        border-radius: 0.5rem;
+        background-color: #fff3cd;
+        border: 1px solid #ffeaa7;
+        color: #856404;
+    }
+    .danger-box {
+        padding: 1rem;
+        border-radius: 0.5rem;
+        background-color: #f8d7da;
+        border: 1px solid #f5c6cb;
+        color: #721c24;
+    }
+</style>
+""", unsafe_allow_html=True)
 
+# ==================== 核心函数 ====================
 
-def _sme_readiness(profile) -> tuple[str, str]:
-    if profile.company_scale == "大型企业":
-        return "大型企业", "基础画像可识别，但当前政策库主要覆盖中小科技企业；建议关注重大专项、总部经济、平台经济、算力中心或产业链牵引类政策。"
-    missing = []
-    if not profile.employees:
-        missing.append("职工总数")
-    if not profile.annual_revenue_wan:
-        missing.append("销售收入")
-    if not profile.asset_total_wan:
-        missing.append("资产总额")
+@st.cache_data
+def load_data(uploaded_file):
+    """加载数据（缓存）"""
+    try:
+        loader = ShrimpDataLoader(uploaded_file)
+        df = loader.load()
 
-    if profile.has_negative_record:
-        return "信用风险", "存在重大违法、失信或安全/质量/环保风险线索，需先人工核实。"
-    if profile.employees > 500 or profile.annual_revenue_wan > 20000 or profile.asset_total_wan > 20000:
-        return "规模超限", "职工、销售收入或资产总额超过科技型中小企业常见门槛。"
-    if missing:
-        return "信息不足", "缺少：" + "、".join(missing) + "。"
-    return "中小企业候选", "职工、销售收入和资产总额均在常见门槛内，仍需结合科技人员、研发投入和知识产权复核。"
+        # 数据验证
+        from src.data_validator import DataValidator
+        validator = DataValidator(df)
+        valid, errors, warnings = validator.validate()
 
+        if not valid:
+            st.error("❌ 数据验证失败！")
+            for error in errors:
+                st.error(f"- {error}")
+            st.error("\n请修复以上错误后重新上传数据文件")
+            st.stop()
 
-def _status_badge(status: str) -> str:
-    if status == "已覆盖":
-        return "✅ 已覆盖"
-    if status == "需复核":
-        return "🟡 需复核"
-    return "🔴 待补充"
+        if warnings:
+            st.warning(f"⚠️ 发现 {len(warnings)} 个警告：")
+            for warning in warnings[:3]:  # 只显示前3个
+                st.warning(f"- {warning}")
+            if len(warnings) > 3:
+                st.info(f"...还有 {len(warnings)-3} 个警告")
 
+        return df
+    except Exception as e:
+        st.error(f"数据加载失败：{e}")
+        return None
 
-def main() -> None:
-    st.set_page_config(page_title="PolicyPilot", page_icon="🧭", layout="wide")
-    st.title("PolicyPilot 企业政策申报与材料生成 AI Agent")
-    st.caption("企业画像抽取 → 政策条款检索 → 匹配评分 → 材料缺口 → 风险提示 → 申报书初稿")
+@st.cache_data
+def process_data(df):
+    """特征工程（缓存）"""
+    try:
+        fe = FeatureEngineer(df)
+        df_enhanced = fe.run_all()
+        return df_enhanced
+    except Exception as e:
+        st.error(f"特征工程失败：{e}")
+        return df
 
-    with st.sidebar:
-        st.header("配置")
-        use_openai = st.toggle("启用 OpenAI 改写申报书", value=bool(os.getenv("OPENAI_API_KEY")))
-        st.caption("未配置 API Key 时，系统使用本地模板；匹配、风险和材料判断不依赖外部 API。")
-        opc_policy_path = BASE_DIR / "reference_repos" / "opc-policy" / "data" / "policies.json"
-        dataset_options = ["公开来源政策库（推荐）"]
-        if opc_policy_path.exists():
-            dataset_options.append("OPC 一人公司政策库（本地参考）")
-        dataset_options.append("模拟演示政策库")
-        dataset_choice = st.selectbox(
-            "内置政策库",
-            dataset_options,
-            index=0,
-            help="公开来源政策库来自政府公开政策/公示的结构化摘要；OPC 本地参考库来自 MIT 开源项目 opcgate/opc-policy，用于本地对照研究；模拟演示政策库仅用于展示。",
+@st.cache_data
+def train_model(df_enhanced):
+    """训练模型（缓存）"""
+    try:
+        predictor = YieldPredictor(df_enhanced)
+        predictor.run_all()
+        return predictor
+    except Exception as e:
+        st.error(f"模型训练失败：{e}")
+        return None
+
+def create_metric_card(title, value, delta=None, suffix=""):
+    """创建指标卡片"""
+    delta_str = f"{delta}" if delta is not None else ""
+    return f"""
+    <div class="metric-card">
+        <div style="font-size: 0.9rem; color: #666;">{title}</div>
+        <div style="font-size: 2rem; font-weight: bold; color: #1f77b4; margin: 0.5rem 0;">
+            {value}{suffix}
+        </div>
+        {f'<div style="font-size: 0.8rem; color: {"green" if delta > 0 else "red"};">{delta_str}</div>' if delta else ''}
+    </div>
+    """
+
+# ==================== 侧边栏 ====================
+
+def sidebar():
+    """侧边栏"""
+    st.sidebar.title("🦞 控制面板")
+    st.sidebar.markdown("---")
+
+    # 数据上传
+    st.sidebar.subheader("📂 数据上传")
+
+    # 检查是否有本地数据
+    data_files = list(DATA_DIR.glob('*.xlsx')) + list(DATA_DIR.glob('*.csv'))
+
+    upload_option = st.sidebar.radio(
+        "选择数据源",
+        ["上传文件", "使用示例数据"]
+    )
+
+    if upload_option == "上传文件":
+        uploaded_file = st.sidebar.file_uploader(
+            "选择数据文件",
+            type=['xlsx', 'csv'],
+            help="支持 .xlsx 和 .csv 格式"
         )
-        uploaded_policies = st.file_uploader(
-            "上传政策 PDF/TXT（可选）",
-            type=["pdf", "txt"],
-            accept_multiple_files=True,
-        )
-        st.caption("公开来源政策库仍用于申报准备度初筛，不代表官方审批预测。")
-        st.divider()
-        st.markdown("**产品定位**")
-        st.write("不是 AI 写文案，而是政策申报前置决策系统。")
-
-    col_left, col_right = st.columns([1.05, 1])
-
-    with col_left:
-        st.subheader("1. 企业材料输入")
-        with st.expander("填写格式与建议包含的信息", expanded=False):
-            st.write("可以直接粘贴企业简介，也可以按下面字段填写。信息越完整，材料缺口和风险判断越准确。")
-            for title, desc in INPUT_FIELD_GUIDE:
-                st.markdown(f"- **{title}**：{desc}")
-            st.info("不确定或没有准备的材料也可以写出来，例如“尚未准备财务报表”。系统会把它识别为待补充项。")
-
-        if "company_text_input" not in st.session_state:
-            st.session_state["company_text_input"] = DEFAULT_COMPANY_TEXT
-
-        c_template, c_demo = st.columns(2)
-        with c_template:
-            if st.button("使用标准填写模板", use_container_width=True):
-                st.session_state["company_text_input"] = COMPANY_INPUT_TEMPLATE
-        with c_demo:
-            if st.button("恢复示例企业", use_container_width=True):
-                st.session_state["company_text_input"] = DEFAULT_COMPANY_TEXT
-
-        company_text = st.text_area(
-            "企业简介 / 项目材料",
-            key="company_text_input",
-            height=360,
-            help="可粘贴营业执照信息、项目介绍、团队规模、营收、知识产权、Demo、合同等材料。",
-        )
-        st.caption("推荐格式：企业名称、地区、行业、团队、营收、研发投入、知识产权、Demo/试点、合同/订单、已备材料、缺失材料、政策意向。")
-        run = st.button("开始分析", type="primary", use_container_width=True)
-
-    if dataset_choice.startswith("OPC"):
-        sample_policies = load_opc_policies(BASE_DIR / "reference_repos" / "opc-policy" / "data" / "policies.json")
-        if not sample_policies:
-            st.warning("未找到 OPC 参考政策库，请确认 reference_repos/opc-policy/data/policies.json 已下载。")
+        return uploaded_file
     else:
-        dataset_file = "public_policies.json" if dataset_choice.startswith("公开来源") else "sample_policies.json"
-        sample_policies = load_sample_policies(BASE_DIR / "data" / dataset_file)
-    uploaded = load_uploaded_policies(uploaded_policies)
-    policies = uploaded + sample_policies
-    stats = _policy_library_stats(policies)
-    with st.sidebar:
-        st.divider()
-        st.markdown("**当前政策库概览**")
-        st.write(f"政策数量：{stats['count']} 条")
-        st.write(f"覆盖区域：{len(stats['regions'])} 个")
-        st.write(f"官方来源：{stats['official_count']} 条")
-        if stats["verified_count"]:
-            st.write(f"已核验：{stats['verified_count']} 条")
-        if stats["max_amount"]:
-            st.write(f"最高金额：{stats['max_amount'] / 10000:g} 万元")
-        st.caption("这里是当前选中政策库的总量；点击“开始分析”后，会显示与当前企业相关的候选数量。")
-        with st.expander("查看数量拆解", expanded=False):
-            st.markdown("**按政策类别**")
-            for name, count in stats["category_counts"].most_common(8):
-                st.write(f"{name}：{count} 条")
-            st.markdown("**按区域**")
-            for name, count in stats["region_counts"].most_common(8):
-                st.write(f"{name}：{count} 条")
-
-    if run and not policies:
-        st.error("当前没有可用政策库。请切换内置政策库，或上传政策 PDF/TXT。")
-        st.stop()
-
-    if run or "results" in st.session_state:
-        if run:
-            profile = parse_company_profile(company_text)
-            results = rank_policies(profile, policies)
-            st.session_state["profile"] = profile
-            st.session_state["results"] = results
-            st.session_state["company_text"] = company_text
+        if data_files:
+            selected_file = st.sidebar.selectbox(
+                "选择示例数据",
+                options=data_files,
+                format_func=lambda x: x.name
+            )
+            return selected_file
         else:
-            profile = st.session_state["profile"]
-            results = st.session_state["results"]
+            st.sidebar.warning("未找到示例数据")
+            return None
 
-        with col_right:
-            st.subheader("2. 企业画像抽取")
-            c1, c2, c3 = st.columns(3)
-            c1.metric("地区", profile.region)
-            c2.metric("行业", profile.industry)
-            c3.metric("团队", f"{profile.employees or 0} 人")
-            c4, c5, c6 = st.columns(3)
-            c4.metric("年营收", f"{profile.annual_revenue_wan:g} 万" if profile.annual_revenue_wan else "待补充")
-            c5.metric("资产总额", f"{profile.asset_total_wan:g} 万" if profile.asset_total_wan else "待补充")
-            c6.metric("知识产权", "有" if profile.has_ip else "无")
-            c7, c8, c9 = st.columns(3)
-            c7.metric("研发费用占比", f"{profile.rd_ratio_percent:g}%" if profile.rd_ratio_percent else "待补充")
-            staff_ratio = profile.tech_staff_ratio_percent or profile.rd_staff_ratio_percent
-            c8.metric("科技/研发人员占比", f"{staff_ratio:g}%" if staff_ratio else "待补充")
-            c9.metric("信用风险", "有线索" if profile.has_negative_record else ("无重大记录" if profile.has_no_major_violation else "待核实"))
-            sme_status, sme_note = _sme_readiness(profile)
-            if sme_status == "中小企业候选":
-                st.success(f"企业规模识别：{sme_status}｜{sme_note}")
-            elif sme_status == "信息不足":
-                st.warning(f"企业规模识别：{sme_status}｜{sme_note}")
-            elif sme_status == "大型企业":
-                st.info(f"企业规模识别：{sme_status}｜{sme_note}")
-            else:
-                st.error(f"企业规模识别：{sme_status}｜{sme_note}")
-            tags = []
-            if profile.is_group_company:
-                tags.append("集团企业")
-            if profile.is_public_company:
-                tags.append("上市公司")
-            if profile.is_platform_company:
-                tags.append("平台型企业")
-            if tags:
-                st.caption("企业属性：" + "、".join(tags))
-            st.write("**识别关键词：**", "、".join(profile.keywords) if profile.keywords else "暂无")
+# ==================== 主页 ====================
 
-        st.divider()
-        st.subheader("3. 可申报政策排行")
+def main_page(df, df_enhanced, predictor):
+    """主页"""
+    st.markdown('<h1 class="main-header">🦞 智虾系统</h1>', unsafe_allow_html=True)
 
-        result_stats = _match_result_stats(results)
-        st.info(
-            f"本次共从 {result_stats['total']} 条政策中筛选，"
-            f"其中 {result_stats['actionable']} 条具备进一步评估价值："
-            f"强匹配 {result_stats['strong']} 条，中高匹配 {result_stats['mid']} 条，"
-            f"弱匹配 {result_stats['weak']} 条，暂不建议 {result_stats['not_recommended']} 条。"
-        )
+    st.markdown(f"""
+    <div style="text-align: center; color: #666; margin-bottom: 2rem;">
+        SmartShrimp Team · 2026年3月
+    </div>
+    """, unsafe_allow_html=True)
 
-        with st.expander("政策库洞察：城市对比与数据质量", expanded=False):
-            city_rows = city_policy_summaries(policies)
-            if city_rows:
-                default_regions = [row["区域"] for row in city_rows[:4]]
-                selected_regions = st.multiselect(
-                    "选择区域对比",
-                    [row["区域"] for row in city_rows],
-                    default=default_regions,
-                )
-                compare_rows = [row for row in city_rows if row["区域"] in selected_regions]
-                st.dataframe(compare_rows, use_container_width=True, hide_index=True)
-            else:
-                st.caption("当前政策库暂无可对比的区域数据。")
+    # 核心指标卡片
+    col1, col2, col3, col4 = st.columns(4)
 
-            issues = validate_policy_library(policies)
-            high = sum(1 for item in issues if item["级别"] == "高")
-            medium = sum(1 for item in issues if item["级别"] == "中")
-            low = sum(1 for item in issues if item["级别"] == "低")
-            st.caption(f"数据质量检查：高风险 {high} 项｜中风险 {medium} 项｜低风险 {low} 项")
-            if issues:
-                st.dataframe(issues[:20], use_container_width=True, hide_index=True)
-                if len(issues) > 20:
-                    st.caption(f"仅展示前 20 项，共 {len(issues)} 项。")
+    with col1:
+        fcr_avg = df_enhanced['FCR'].mean()
+        st.markdown(create_metric_card("平均 FCR", f"{fcr_avg:.2f}"), unsafe_allow_html=True)
 
-        top_cols = st.columns(3)
-        for i, r in enumerate(results[:3]):
-            with top_cols[i]:
-                st.metric(r.policy.name, f"{r.score} 分", r.level)
-                st.caption(f"{r.policy.category}｜{r.policy.region}")
+    with col2:
+        sgr_avg = df_enhanced['SGR'].mean()
+        st.markdown(create_metric_card("平均 SGR", f"{sgr_avg:.2f}", "%"), unsafe_allow_html=True)
 
-        selected_name = st.selectbox("选择一个政策查看细节", [r.policy.name for r in results])
-        selected = next(r for r in results if r.policy.name == selected_name)
+    with col3:
+        do_avg = df_enhanced['溶解氧 (mg/L)'].mean()
+        st.markdown(create_metric_card("平均溶解氧", f"{do_avg:.2f}", "mg/L"), unsafe_allow_html=True)
 
-        d1, d2 = st.columns([1, 1])
-        with d1:
-            st.markdown(f"### {selected.policy.name}")
-            st.write(f"**匹配等级：** {selected.level}")
-            st.progress(min(selected.score / 100, 1.0))
-            st.write(f"**政策区域：** {selected.policy.region}")
-            if selected.policy.issuer:
-                st.write(f"**发文单位：** {selected.policy.issuer}")
-            if selected.policy.level or selected.policy.status:
-                st.write(f"**政策层级/状态：** {selected.policy.level or '未标注'}｜{selected.policy.status or '未标注'}")
-            if selected.policy.application_window:
-                st.write(f"**申报窗口：** {selected.policy.application_window}")
-            countdown = policy_countdown(selected.policy)
-            if countdown:
-                if countdown["status"] in ["即将截止", "已过期"]:
-                    st.warning(f"窗口状态：{countdown['status']}｜{countdown['label']}｜剩余 {countdown['days_left']} 天")
-                elif countdown["status"] == "常态化":
-                    st.info(f"窗口状态：{countdown['status']}｜{countdown['label']}")
-                else:
-                    st.info(f"窗口状态：{countdown['status']}｜{countdown['label']}｜剩余 {countdown['days_left']} 天")
-            if selected.policy.amount_max_yuan:
-                st.write(f"**最高金额：** {selected.policy.amount_max_yuan / 10000:g} 万元")
-            st.write(f"**支持方向：** {', '.join(selected.policy.target_industries)}")
-            st.write(f"**政策激励：** {selected.policy.subsidy}")
-            if selected.policy.official_url:
-                st.link_button("查看官方原文", selected.policy.official_url)
-            if selected.policy.updated_at or selected.policy.verified:
-                st.caption(f"数据更新：{selected.policy.updated_at or '未标注'}｜{'已核验' if selected.policy.verified else '需复核'}")
+    with col4:
+        survival_rate = df_enhanced['存活率 (%)'].iloc[-1] if len(df_enhanced) > 0 else 0
+        st.markdown(create_metric_card("当前存活率", f"{survival_rate:.1f}", "%"), unsafe_allow_html=True)
 
-            st.markdown("#### 评分拆解")
-            st.json(selected.score_breakdown.to_dict(), expanded=False)
+    st.markdown("---")
 
-            st.markdown("#### 命中理由")
-            for item in selected.hit_reasons:
-                st.success(item)
+    # 环境预警
+    st.subheader("🚨 环境预警")
 
-        with d2:
-            st.markdown("#### 材料状态")
-            for item in selected.material_items:
-                if item.status == "已覆盖":
-                    st.success(f"{_status_badge(item.status)}｜{item.name}｜{item.reason}")
-                elif item.status == "需复核":
-                    st.warning(f"{_status_badge(item.status)}｜{item.name}｜{item.reason}")
-                else:
-                    st.error(f"{_status_badge(item.status)}｜{item.name}｜{item.reason}")
+    if '预警等级' in df_enhanced.columns:
+        alert_counts = df_enhanced['预警等级'].value_counts()
 
-            st.markdown("#### 风险提示")
-            for item in selected.risk_flags:
-                if item.level == "高":
-                    st.error(f"【{item.level}】{item.item}｜{item.mitigation}")
-                elif item.level == "中":
-                    st.warning(f"【{item.level}】{item.item}｜{item.mitigation}")
-                else:
-                    st.info(f"【{item.level}】{item.item}｜{item.mitigation}")
+        col1, col2, col3, col4 = st.columns(4)
 
-        st.markdown("#### 引用依据")
-        for c in selected.cited_clauses:
-            st.code(c)
+        with col1:
+            red_count = alert_counts.get('红色预警', 0)
+            st.markdown(f"""
+            <div class="danger-box">
+                <div style="font-size: 1.5rem; font-weight: bold;">{red_count}</div>
+                <div>红色预警</div>
+            </div>
+            """, unsafe_allow_html=True)
 
-        st.markdown("#### 下一步动作")
-        st.write("\n".join(f"- {x}" for x in selected.next_actions))
+        with col2:
+            orange_count = alert_counts.get('橙色预警', 0)
+            st.markdown(f"""
+            <div class="warning-box">
+                <div style="font-size: 1.5rem; font-weight: bold;">{orange_count}</div>
+                <div>橙色预警</div>
+            </div>
+            """, unsafe_allow_html=True)
 
-        st.divider()
-        st.subheader("4. 一键生成申报材料")
-        llm = LLMProvider(use_openai=use_openai)
-        draft = build_application_draft(profile, selected, llm=llm)
-        checklist = build_material_checklist(selected)
-        pitch = build_pitch(profile, results[:3])
-        qna = build_qna(profile, results[:3])
-        explanation = build_demo_explanation(profile, results[:3])
-        report = AnalysisReport(profile, results, draft, checklist, pitch, qna, explanation)
-        full_report = render_report_markdown(report)
+        with col3:
+            yellow_count = alert_counts.get('黄色预警', 0)
+            st.markdown(f"""
+            <div style="background-color: #fff3cd; padding: 1rem; border-radius: 0.5rem;">
+                <div style="font-size: 1.5rem; font-weight: bold;">{yellow_count}</div>
+                <div>黄色预警</div>
+            </div>
+            """, unsafe_allow_html=True)
 
-        tab1, tab2, tab3, tab4 = st.tabs(["申报书初稿", "材料清单", "60 秒产品介绍", "常见问题"])
-        with tab1:
-            st.markdown(draft)
-            st.download_button("下载申报书初稿 Markdown", data=draft.encode("utf-8"), file_name="policypilot_application_draft.md", mime="text/markdown")
-        with tab2:
-            st.markdown(checklist)
-            st.download_button("下载材料清单", data=checklist.encode("utf-8"), file_name="policypilot_material_checklist.md", mime="text/markdown")
-        with tab3:
-            st.markdown(pitch)
-            st.download_button("下载产品介绍", data=pitch.encode("utf-8"), file_name="policypilot_intro.md", mime="text/markdown")
-        with tab4:
-            st.markdown(qna)
-            st.download_button("下载常见问题", data=qna.encode("utf-8"), file_name="policypilot_faq.md", mime="text/markdown")
+        with col4:
+            normal_count = alert_counts.get('正常', 0)
+            st.markdown(f"""
+            <div class="success-box">
+                <div style="font-size: 1.5rem; font-weight: bold;">{normal_count}</div>
+                <div>正常</div>
+            </div>
+            """, unsafe_allow_html=True)
 
-        st.divider()
-        c1, c2 = st.columns(2)
-        with c1:
-            st.download_button("下载完整分析报告 Markdown", data=full_report.encode("utf-8"), file_name="policypilot_analysis_report.md", mime="text/markdown", use_container_width=True)
-        with c2:
-            st.download_button("下载政策匹配结果 CSV", data=results_to_csv(results), file_name="policypilot_policy_results.csv", mime="text/csv", use_container_width=True)
+    st.markdown("---")
 
-    else:
-        with col_right:
-            st.subheader("演示输出预览")
-            st.info("点击“开始分析”后，将输出企业画像、政策匹配排行、缺失材料、风险提示和申报书初稿。")
-            st.markdown(
-                """
-**你要强调的核心：**
+    # 快速操作
+    st.subheader("⚡ 快速分析")
 
-- 不是单纯生成申报书；
-- 是判断“能不能申报、缺什么、风险在哪、怎么提高通过率”；
-- 可服务园区、孵化器、政企服务机构、中小企业。
-"""
+    col1, col2, col3 = st.columns(3)
+
+    with col1:
+        if st.button("📊 生成完整分析报告", use_container_width=True):
+            st.info("请使用侧边栏导航到'报告生成'页面")
+
+    with col2:
+        if st.button("🔍 查看模型评估", use_container_width=True):
+            st.info("请使用侧边栏导航到'模型评估'页面")
+
+    with col3:
+        if st.button("📈 查看详细图表", use_container_width=True):
+            st.info("请使用侧边栏导航到'数据分析'页面")
+
+# ==================== 数据分析页面 ====================
+
+def data_analysis_page(df, df_enhanced):
+    """数据分析页面"""
+    st.title("📊 数据分析")
+
+    # 标签页
+    tab1, tab2, tab3, tab4, tab5 = st.tabs([
+        "FCR 趋势", "SGR 分析", "环境参数", "相关性分析", "预警分析"
+    ])
+
+    with tab1:
+        st.subheader("FCR (饲料转化率) 趋势分析")
+
+        col1, col2 = st.columns([2, 1])
+
+        with col1:
+            fig = go.Figure()
+            fig.add_trace(go.Scatter(
+                x=df_enhanced['日期'],
+                y=df_enhanced['FCR'],
+                mode='lines+markers',
+                name='FCR',
+                line=dict(color='#1f77b4', width=3),
+                marker=dict(size=8)
+            ))
+
+            fig.add_hline(y=1.5, line_dash="dash", line_color="green",
+                         annotation_text="优秀水平 (FCR<1.5)")
+            fig.add_hline(y=2.0, line_dash="dash", line_color="orange",
+                         annotation_text="警戒水平 (FCR>2.0)")
+
+            fig.update_layout(
+                title="FCR 趋势图",
+                xaxis_title="日期",
+                yaxis_title="FCR",
+                hovermode='x unified',
+                template='plotly_white'
             )
 
+            st.plotly_chart(fig, use_container_width=True)
 
-if __name__ == "__main__":
+        with col2:
+            st.metric("平均 FCR", f"{df_enhanced['FCR'].mean():.2f}")
+            st.metric("最小 FCR", f"{df_enhanced['FCR'].min():.2f}")
+            st.metric("最大 FCR", f"{df_enhanced['FCR'].max():.2f}")
+            st.metric("标准差", f"{df_enhanced['FCR'].std():.2f}")
+
+    with tab2:
+        st.subheader("SGR (特定生长率) 分析")
+
+        fig = make_subplots(
+            rows=2, cols=1,
+            subplot_titles=('日 SGR', '累积 SGR'),
+            vertical_spacing=0.15
+        )
+
+        fig.add_trace(
+            go.Scatter(x=df_enhanced['日期'], y=df_enhanced['SGR'],
+                      mode='lines+markers', name='日 SGR',
+                      line=dict(color='#2ecc71', width=2)),
+            row=1, col=1
+        )
+
+        if 'SGR_累积' in df_enhanced.columns:
+            fig.add_trace(
+                go.Scatter(x=df_enhanced['日期'], y=df_enhanced['SGR_累积'],
+                          mode='lines+markers', name='累积 SGR',
+                          line=dict(color='#e74c3c', width=2)),
+                row=2, col=1
+            )
+
+        fig.update_layout(template='plotly_white', height=600)
+        st.plotly_chart(fig, use_container_width=True)
+
+    with tab3:
+        st.subheader("环境参数分析")
+
+        param = st.selectbox(
+            "选择参数",
+            ['水温 (°C)', '盐度 (ppt)', 'pH 值', '溶解氧 (mg/L)']
+        )
+
+        fig = go.Figure()
+        fig.add_trace(go.Scatter(
+            x=df_enhanced['日期'],
+            y=df_enhanced[param],
+            mode='lines+markers',
+            name=param,
+            line=dict(width=2),
+            marker=dict(size=6),
+            fill='tozeroy' if param == '溶解氧 (mg/L)' else None
+        ))
+
+        fig.update_layout(
+            title=f"{param} 趋势",
+            xaxis_title="日期",
+            yaxis_title=param,
+            template='plotly_white'
+        )
+
+        st.plotly_chart(fig, use_container_width=True)
+
+    with tab4:
+        st.subheader("相关性分析")
+
+        numeric_cols = df_enhanced.select_dtypes(include=[np.number]).columns.tolist()
+        numeric_cols = [col for col in numeric_cols if col not in ['预警等级', '环境压力指数']][:10]
+
+        corr_matrix = df_enhanced[numeric_cols].corr()
+
+        fig = go.Figure(data=go.Heatmap(
+            z=corr_matrix.values,
+            x=corr_matrix.columns,
+            y=corr_matrix.columns,
+            colorscale='RdBu_r',
+            zmid=0,
+            text=np.round(corr_matrix.values, 2),
+            texttemplate='%{text}',
+            textfont={"size": 10},
+            colorbar=dict(title="相关系数")
+        ))
+
+        fig.update_layout(
+            title="变量相关性热力图",
+            template='plotly_white',
+            height=600
+        )
+
+        st.plotly_chart(fig, use_container_width=True)
+
+    with tab5:
+        st.subheader("环境预警分析")
+
+        if '预警等级' in df_enhanced.columns:
+            # 预警时间线
+            alert_order = {'红色预警': 4, '橙色预警': 3, '黄色预警': 2, '正常': 1}
+            df_enhanced['预警等级_数值'] = df_enhanced['预警等级'].map(alert_order)
+
+            fig = go.Figure()
+
+            for level, color in [
+                ('红色预警', 'red'),
+                ('橙色预警', 'orange'),
+                ('黄色预警', 'yellow'),
+                ('正常', 'green')
+            ]:
+                data = df_enhanced[df_enhanced['预警等级'] == level]
+                if len(data) > 0:
+                    fig.add_trace(go.Scatter(
+                        x=data['日期'],
+                        y=data['预警等级_数值'],
+                        mode='markers',
+                        name=level,
+                        marker=dict(size=12, color=color, line=dict(width=2, color='white'))
+                    ))
+
+            fig.update_layout(
+                title="环境预警时间线",
+                xaxis_title="日期",
+                yaxis_title="预警等级",
+                template='plotly_white',
+                height=400
+            )
+
+            st.plotly_chart(fig, use_container_width=True)
+
+            # 预警详情
+            st.subheader("预警详情")
+
+            for level in ['红色预警', '橙色预警', '黄色预警']:
+                alerts = df_enhanced[df_enhanced['预警等级'] == level]
+                if len(alerts) > 0:
+                    with st.expander(f"{level} ({len(alerts)} 天)"):
+                        for idx, row in alerts.iterrows():
+                            date_str = row['日期'].strftime('%Y-%m-%d') if pd.notna(row.get('日期')) else f"第{idx+1}天"
+                            reason = row.get('压力原因', '数据异常')
+                            st.write(f"**{date_str}**: {reason}")
+
+# ==================== 模型评估页面 ====================
+
+def model_evaluation_page(df_enhanced, predictor):
+    """模型评估页面"""
+    st.title("🤖 模型评估")
+
+    if not predictor or not predictor.model:
+        st.warning("模型未训练，请先运行完整分析")
+        return
+
+    # 标签页
+    tab1, tab2, tab3 = st.tabs(["模型性能", "特征重要性", "预测分析"])
+
+    with tab1:
+        st.subheader("模型性能指标")
+
+        col1, col2, col3, col4 = st.columns(4)
+
+        with col1:
+            st.metric("R² 得分", f"{predictor.metrics['R²']:.3f}")
+
+        with col2:
+            st.metric("MAE", f"{predictor.metrics['MAE']:.2f} kg")
+
+        with col3:
+            st.metric("RMSE", f"{predictor.metrics['RMSE']:.2f} kg")
+
+        with col4:
+            st.metric("训练样本数", f"{len(predictor.X)}")
+
+        st.markdown("---")
+
+        st.subheader("预测 vs 实际")
+
+        fig = go.Figure()
+
+        fig.add_trace(go.Scatter(
+            x=predictor.y_test,
+            y=predictor.y_pred,
+            mode='markers',
+            name='预测值',
+            marker=dict(size=10, color='blue', opacity=0.6)
+        ))
+
+        fig.add_trace(go.Scatter(
+            x=predictor.y_test,
+            y=predictor.y_test,
+            mode='lines',
+            name='完美预测线',
+            line=dict(color='red', dash='dash')
+        ))
+
+        fig.update_layout(
+            title="预测值 vs 实际值",
+            xaxis_title="实际产量 (kg)",
+            yaxis_title="预测产量 (kg)",
+            template='plotly_white'
+        )
+
+        st.plotly_chart(fig, use_container_width=True)
+
+    with tab2:
+        st.subheader("特征重要性")
+
+        if predictor.feature_importance is not None:
+            fig = go.Figure(go.Bar(
+                x=predictor.feature_importance['重要性'].head(10),
+                y=predictor.feature_importance['特征'].head(10),
+                orientation='h',
+                marker=dict(color='steelblue')
+            ))
+
+            fig.update_layout(
+                title="TOP 10 特征重要性",
+                xaxis_title="重要性",
+                yaxis_title="特征",
+                template='plotly_white'
+            )
+
+            st.plotly_chart(fig, use_container_width=True)
+
+            # 特征重要性表格
+            st.subheader("特征重要性详情")
+            st.dataframe(
+                predictor.feature_importance.head(10),
+                use_container_width=True,
+                hide_index=True
+            )
+
+    with tab3:
+        st.subheader("产量预测")
+
+        st.info("💡 提示：可以调整下方参数，查看预测结果")
+
+        col1, col2, col3 = st.columns(3)
+
+        with col1:
+            temp = st.slider("水温 (°C)", 20.0, 35.0, 28.0, 0.1)
+
+        with col2:
+            do = st.slider("溶解氧 (mg/L)", 3.0, 10.0, 6.5, 0.1)
+
+        with col3:
+            ph = st.slider("pH 值", 7.0, 9.0, 8.0, 0.1)
+
+        if st.button("🔮 预测产量", use_container_width=True):
+            st.success(f"预计产量：{1500:.0f} kg")
+            st.info("（此为演示值，实际预测需要完整的特征数据）")
+
+# ==================== 报告生成页面 ====================
+
+def report_generation_page(df, df_enhanced, predictor):
+    """报告生成页面"""
+    st.title("📄 报告生成")
+
+    st.info("💡 提示：生成报告需要先运行完整分析")
+
+    col1, col2 = st.columns(2)
+
+    with col1:
+        st.subheader("Word 报告")
+
+        st.markdown("""
+        **包含内容**：
+        - 数据概览
+        - FCR/SGR 分析
+        - 环境预警
+        - 模型预测结果
+        - 决策建议
+        """)
+
+        if st.button("📝 生成 Word 报告", use_container_width=True):
+            with st.spinner("正在生成 Word 报告..."):
+                try:
+                    from src.professional_analyzer import Visualizer, ReportGenerator
+
+                    visualizer = Visualizer(df_enhanced, REPORTS_DIR / 'figures_dashboard')
+                    visualizer.generate_all(predictor)
+
+                    output_path = REPORTS_DIR / 'analysis_report_dashboard.docx'
+                    report_gen = ReportGenerator(df_enhanced, predictor, visualizer, output_path)
+                    report_gen.generate()
+
+                    st.success(f"✅ 报告已生成：{output_path}")
+
+                    with open(output_path, 'rb') as f:
+                        st.download_button(
+                            label="⬇️ 下载报告",
+                            data=f,
+                            file_name='analysis_report.docx',
+                            mime='application/vnd.openxmlformats-officedocument.wordprocessingml.document'
+                        )
+                except Exception as e:
+                    st.error(f"生成失败：{e}")
+
+    with col2:
+        st.subheader("模型评估报告")
+
+        st.markdown("""
+        **包含内容**：
+        - 交叉验证结果
+        - 残差分析
+        - 特征重要性
+        - 稳定性测试
+        """)
+
+        if st.button("📊 生成评估报告", use_container_width=True):
+            with st.spinner("正在生成评估报告..."):
+                try:
+                    from src.model_evaluation import run_evaluation
+                    run_evaluation()
+
+                    report_path = REPORTS_DIR / 'model_evaluation.txt'
+                    if report_path.exists():
+                        st.success(f"✅ 报告已生成：{report_path}")
+
+                        with open(report_path, 'r', encoding='utf-8') as f:
+                            st.text(f.read())
+                except Exception as e:
+                    st.error(f"生成失败：{e}")
+
+# ==================== 高级模型页面 ====================
+
+def advanced_models_page(df, df_enhanced):
+    """高级模型页面"""
+    st.title("🧠 高级机器学习模型")
+
+    # 标签页
+    tab1, tab2, tab3, tab4, tab5, tab6, tab7 = st.tabs([
+        "深度学习", "时序模型", "模型融合", "超参数优化", "模型解释", "模型对比", "多模态融合"
+    ])
+
+    with tab1:
+        st.subheader("🧠 深度学习模型")
+
+        st.info("💡 深度学习模型使用神经网络进行时序预测，能够捕捉复杂的非线性关系")
+
+        model_type = st.selectbox(
+            "选择模型类型",
+            ["LSTM", "GRU", "Transformer"],
+            help="LSTM: 长短期记忆网络\nGRU: 门控循环单元\nTransformer: 自注意力机制"
+        )
+
+        col1, col2, col3 = st.columns(3)
+
+        with col1:
+            epochs = st.slider("训练轮数", 10, 200, 50, 10)
+
+        with col2:
+            lr = st.slider("学习率", 0.0001, 0.01, 0.001, 0.0001, format="%.4f")
+
+        with col3:
+            batch_size = st.selectbox("批次大小", [8, 16, 32, 64], index=1)
+
+        if st.button(f"🚀 训练 {model_type} 模型", use_container_width=True):
+            try:
+                from src.advanced.deep_learning_models import run_deep_learning_prediction
+
+                with st.spinner(f"正在训练 {model_type} 模型，这可能需要几分钟..."):
+                    predictor = run_deep_learning_prediction(df_enhanced, model_type.lower())
+
+                    if predictor:
+                        st.success(f"✅ {model_type} 模型训练完成！")
+
+                        # 显示结果
+                        metrics = predictor.get_metrics()
+
+                        col1, col2, col3 = st.columns(3)
+                        with col1:
+                            st.metric("R² 得分", f"{metrics['R²']:.3f}")
+                        with col2:
+                            st.metric("MAE", f"{metrics['MAE']:.2f} kg")
+                        with col3:
+                            st.metric("RMSE", f"{metrics['RMSE']:.2f} kg")
+
+                        # 预测可视化
+                        if hasattr(predictor, 'y_true') and hasattr(predictor, 'y_pred'):
+                            fig = go.Figure()
+                            fig.add_trace(go.Scatter(
+                                x=list(range(len(predictor.y_true))),
+                                y=predictor.y_true,
+                                mode='lines',
+                                name='实际值',
+                                line=dict(color='blue', width=2)
+                            ))
+                            fig.add_trace(go.Scatter(
+                                x=list(range(len(predictor.y_pred))),
+                                y=predictor.y_pred,
+                                mode='lines',
+                                name='预测值',
+                                line=dict(color='red', width=2, dash='dash')
+                            ))
+
+                            fig.update_layout(
+                                title=f"{model_type} 预测结果",
+                                xaxis_title="样本",
+                                yaxis_title="产量 (kg)",
+                                template='plotly_white',
+                                height=400
+                            )
+
+                            st.plotly_chart(fig, use_container_width=True)
+
+            except Exception as e:
+                st.error(f"❌ 训练失败：{e}")
+                st.info("提示：请确保已安装 PyTorch (pip install torch)")
+
+    with tab2:
+        st.subheader("⏰ 时序预测模型")
+
+        st.info("💡 时序模型专门用于基于历史数据预测未来趋势")
+
+        ts_model = st.selectbox(
+            "选择时序模型",
+            ["Prophet", "ARIMA", "集成预测"],
+            help="Prophet: Facebook 的时序预测工具\nARIMA: 自回归积分滑动平均\n集成预测: 结合多个模型"
+        )
+
+        periods = st.slider("预测天数", 1, 30, 7, 1)
+
+        if st.button(f"🔮 运行 {ts_model} 预测", use_container_width=True):
+            try:
+                from src.advanced.time_series_models import run_time_series_prediction
+
+                with st.spinner(f"正在运行 {ts_model} 预测..."):
+                    ensemble = run_time_series_prediction(df)
+
+                    if ensemble:
+                        st.success(f"✅ {ts_model} 预测完成！")
+
+                        # 获取预测结果
+                        predictions = ensemble.predict_all(periods)
+
+                        # 显示预测
+                        if ts_model == "集成预测" or ts_model in predictions:
+                            pred_data = predictions.get(ts_model, predictions.get('集成', None))
+
+                            if pred_data is not None:
+                                # 创建预测图
+                                last_date = pd.to_datetime(df['日期'].iloc[-1])
+                                forecast_dates = pd.date_range(
+                                    start=last_date + pd.Timedelta(days=1),
+                                    periods=periods,
+                                    freq='D'
+                                )
+
+                                fig = go.Figure()
+                                fig.add_trace(go.Scatter(
+                                    x=pd.to_datetime(df['日期']),
+                                    y=df['预计产量 (kg)'],
+                                    mode='lines',
+                                    name='历史数据',
+                                    line=dict(color='blue', width=2)
+                                ))
+                                fig.add_trace(go.Scatter(
+                                    x=forecast_dates,
+                                    y=pred_data[:periods],
+                                    mode='lines+markers',
+                                    name='预测数据',
+                                    line=dict(color='red', width=2, dash='dash')
+                                ))
+
+                                fig.update_layout(
+                                    title=f"{ts_model} - 未来 {periods} 天产量预测",
+                                    xaxis_title="日期",
+                                    yaxis_title="产量 (kg)",
+                                    template='plotly_white',
+                                    height=400
+                                )
+
+                                st.plotly_chart(fig, use_container_width=True)
+
+                        # 显示所有模型指标对比
+                        metrics = ensemble.get_all_metrics()
+                        if metrics:
+                            st.subheader("模型性能对比")
+
+                            metrics_df = pd.DataFrame(metrics).T
+                            st.dataframe(metrics_df, use_container_width=True)
+
+            except Exception as e:
+                st.error(f"❌ 预测失败：{e}")
+                st.info("提示：请确保已安装 prophet 或 pmdarima (pip install prophet pmdarima)")
+
+    with tab3:
+        st.subheader("🔀 模型融合")
+
+        st.info("💡 模型融合结合多个模型的预测结果，提高预测准确性和稳定性")
+
+        st.markdown("""
+        **融合策略**：
+        - Random Forest (RF)
+        - XGBoost (XGB)
+        - LightGBM (LGBM)
+        - Gradient Boosting (GB)
+        - Ridge Regression
+
+        基于 R² 得分自动分配权重
+        """)
+
+        if st.button("🚀 运行模型融合", use_container_width=True):
+            try:
+                from src.advanced.model_ensemble import run_model_ensemble
+
+                with st.spinner("正在训练融合模型..."):
+                    ensemble = run_model_ensemble(df_enhanced)
+
+                    if ensemble:
+                        st.success("✅ 模型融合完成！")
+
+                        # 获取指标
+                        metrics = ensemble.get_metrics()
+
+                        col1, col2, col3 = st.columns(3)
+                        with col1:
+                            st.metric("集成 R²", f"{metrics['R²']:.3f}")
+                        with col2:
+                            st.metric("MAE", f"{metrics['MAE']:.2f} kg")
+                        with col3:
+                            st.metric("RMSE", f"{metrics['RMSE']:.2f} kg")
+
+                        # 特征重要性
+                        importance_df = ensemble.get_feature_importance()
+                        if importance_df is not None:
+                            st.subheader("特征重要性 (基于 Random Forest)")
+
+                            fig = go.Figure(go.Bar(
+                                x=importance_df['重要性'].head(10),
+                                y=importance_df['特征'].head(10),
+                                orientation='h',
+                                marker=dict(color='steelblue')
+                            ))
+
+                            fig.update_layout(
+                                title="TOP 10 特征重要性",
+                                xaxis_title="重要性",
+                                yaxis_title="特征",
+                                template='plotly_white'
+                            )
+
+                            st.plotly_chart(fig, use_container_width=True)
+
+            except Exception as e:
+                st.error(f"❌ 融合失败：{e}")
+
+    with tab4:
+        st.subheader("🎯 超参数优化")
+
+        st.info("💡 使用 Optuna 自动搜索最优模型参数")
+
+        n_trials = st.slider("优化试验次数", 10, 100, 30, 10,
+                            help="试验次数越多，结果越好，但耗时越长")
+
+        st.markdown("""
+        **优化参数**：
+        - n_estimators: 树的数量 (50-300)
+        - max_depth: 最大深度 (3-20)
+        - min_samples_split: 最小分割样本数 (2-20)
+        - min_samples_leaf: 最小叶子节点样本数 (1-10)
+        - max_features: 特征采样比例 (0.3-1.0)
+        """)
+
+        if st.button("🔍 开始优化", use_container_width=True):
+            try:
+                from src.advanced.hyperparameter_tuning import run_hyperparameter_tuning
+
+                with st.spinner(f"正在进行 {n_trials} 次优化试验..."):
+                    model, r2 = run_hyperparameter_tuning(df_enhanced)
+
+                    st.success(f"✅ 优化完成！最佳 R²: {r2:.3f}")
+
+            except Exception as e:
+                st.error(f"❌ 优化失败：{e}")
+                st.info("提示：请确保已安装 optuna (pip install optuna)")
+
+    with tab5:
+        st.subheader("📊 模型解释 (SHAP)")
+
+        st.info("💡 使用 SHAP 分析模型如何做出预测决策")
+
+        st.markdown("""
+        **SHAP (SHapley Additive exPlanations)**：
+        - 基于博弈论的特征重要性解释
+        - 显示每个特征对预测结果的贡献
+        - 提供全局和局部解释
+        """)
+
+        if st.button("🔍 生成 SHAP 分析", use_container_width=True):
+            try:
+                from src.professional_analyzer import YieldPredictor
+                from src.advanced.model_explainer import explain_model
+                from config import REPORTS_DIR
+
+                with st.spinner("正在计算 SHAP 值..."):
+                    # 训练模型
+                    predictor = YieldPredictor(df_enhanced)
+                    predictor.run_all()
+
+                    # 准备特征
+                    feature_cols = [col for col in df_enhanced.columns if col not in [
+                        '日期', '预计产量 (kg)', '预警等级', '环境压力指数', '压力原因'
+                    ] and df_enhanced[col].dtype in ['float64', 'int64']]
+
+                    X = df_enhanced[feature_cols].fillna(df_enhanced[feature_cols].median())
+
+                    # 解释模型
+                    output_dir = REPORTS_DIR / 'shap_analysis'
+                    explainer = explain_model(
+                        predictor.model,
+                        X.values,
+                        feature_cols,
+                        output_dir
+                    )
+
+                    if explainer and explainer.explainer:
+                        st.success("✅ SHAP 分析完成！")
+
+                        # 获取 Top 特征
+                        top_features = explainer.get_top_features(10)
+
+                        if top_features is not None:
+                            st.subheader("TOP 10 特征重要性")
+
+                            fig = go.Figure(go.Bar(
+                                x=top_features['重要性'],
+                                y=top_features['特征'],
+                                orientation='h',
+                                marker=dict(color='coral')
+                            ))
+
+                            fig.update_layout(
+                                title="SHAP 特征重要性（均值绝对值）",
+                                xaxis_title="SHAP 值",
+                                yaxis_title="特征",
+                                template='plotly_white'
+                            )
+
+                            st.plotly_chart(fig, use_container_width=True)
+
+                            # 显示表格
+                            st.dataframe(top_features, use_container_width=True, hide_index=True)
+
+                        # 显示生成的图表
+                        shap_images = list(output_dir.glob('*.png')) if output_dir.exists() else []
+                        if shap_images:
+                            st.subheader("生成的可视化")
+                            for img_path in shap_images:
+                                st.image(str(img_path), caption=img_path.stem, use_container_width=True)
+
+            except Exception as e:
+                st.error(f"❌ 分析失败：{e}")
+                st.info("提示：请确保已安装 shap (pip install shap)")
+
+    with tab6:
+        st.subheader("🔄 全模型对比")
+
+        st.info("💡 对比所有模型的性能")
+
+        if st.button("🚊 运行全模型对比", use_container_width=True):
+            try:
+                from src.model_comparison import run_comparison
+
+                with st.spinner("正在对比所有模型..."):
+                    # 这里需要临时重定向输出
+                    import io
+                    import sys
+                    old_stdout = sys.stdout
+                    sys.stdout = buffer = io.StringIO()
+
+                    try:
+                        run_comparison()
+                        output = buffer.getvalue()
+                    finally:
+                        sys.stdout = old_stdout
+
+                    st.success("✅ 模型对比完成！")
+
+                    # 显示输出
+                    st.text(output)
+
+            except Exception as e:
+                st.error(f"❌ 对比失败：{e}")
+
+    with tab7:
+        st.subheader("🎭 多模态融合")
+
+        st.info("💡 多模态融合结合传感器时序数据、统计特征和图像特征，提升预测准确性")
+
+        st.markdown("""
+        **融合策略**：
+        - **早期融合** (Early Fusion): 在特征层面融合不同模态的数据
+        - **晚期融合** (Late Fusion): 在决策层面融合不同模型的预测结果
+        - **混合融合** (Hybrid Fusion): 使用神经网络进行深度融合
+        """)
+
+        col1, col2 = st.columns(2)
+
+        with col1:
+            fusion_strategy = st.selectbox(
+                "选择融合策略",
+                ["early", "late", "hybrid"],
+                format_func=lambda x: {
+                    "early": "早期融合 (特征级)",
+                    "late": "晚期融合 (决策级)",
+                    "hybrid": "混合融合 (深度学习)"
+                }[x],
+                help="早期融合: 特征级融合\n晚期融合: 决策级融合\n混合融合: 神经网络融合"
+            )
+
+        with col2:
+            model_type = st.selectbox(
+                "选择基础模型",
+                ["random_forest", "gradient_boosting"],
+                format_func=lambda x: {
+                    "random_forest": "随机森林",
+                    "gradient_boosting": "梯度提升"
+                }[x] if x != "hybrid" else "自动"
+            )
+
+        if fusion_strategy == "hybrid":
+            st.warning("⚠️ 混合融合需要PyTorch，训练时间较长")
+
+        if st.button("🚀 运行多模态融合", use_container_width=True):
+            try:
+                from src.advanced.multi_modal_fusion import run_multimodal_fusion
+
+                with st.spinner(f"正在运行{fusion_strategy}融合..."):
+                    # 临时重定向输出
+                    import io
+                    import sys
+                    old_stdout = sys.stdout
+                    sys.stdout = buffer = io.StringIO()
+
+                    try:
+                        predictor = run_multimodal_fusion(
+                            df_enhanced,
+                            fusion_strategy=fusion_strategy,
+                            model_type=model_type
+                        )
+                        output = buffer.getvalue()
+                    finally:
+                        sys.stdout = old_stdout
+
+                    st.success("✅ 多模态融合完成！")
+
+                    # 显示输出
+                    with st.expander("查看详细输出"):
+                        st.text(output)
+
+                    # 显示指标
+                    if hasattr(predictor, 'metrics') and predictor.metrics:
+                        col1, col2, col3 = st.columns(3)
+
+                        with col1:
+                            st.metric("R² 得分", f"{predictor.metrics['R²']:.3f}")
+
+                        with col2:
+                            st.metric("MAE", f"{predictor.metrics['MAE']:.2f} kg")
+
+                        with col3:
+                            st.metric("RMSE", f"{predictor.metrics['RMSE']:.2f} kg")
+
+                    # 显示特征重要性（仅早期融合）
+                    if fusion_strategy == 'early':
+                        importance = predictor.get_feature_importance()
+                        if importance is not None:
+                            st.subheader("特征重要性 (TOP 10)")
+
+                            fig = go.Figure(go.Bar(
+                                x=importance['重要性'].head(10),
+                                y=importance['特征'].head(10),
+                                orientation='h',
+                                marker=dict(color='steelblue')
+                            ))
+
+                            fig.update_layout(
+                                title="TOP 10 多模态特征重要性",
+                                xaxis_title="重要性",
+                                yaxis_title="特征",
+                                template='plotly_white'
+                            )
+
+                            st.plotly_chart(fig, use_container_width=True)
+
+            except Exception as e:
+                st.error(f"❌ 融合失败：{e}")
+                st.info("提示: 确保已安装所需依赖 (pip install torch transformers)")
+
+# ==================== 数据概览页面 ====================
+
+def data_overview_page(df):
+    """数据概览页面"""
+    st.title("📋 数据概览")
+
+    # 基本信息
+    col1, col2, col3, col4 = st.columns(4)
+
+    with col1:
+        st.metric("总记录数", len(df))
+
+    with col2:
+        st.metric("变量数", len(df.columns))
+
+    with col3:
+        st.metric("时间跨度", f"{len(df)} 天")
+
+    with col4:
+        st.metric("数据完整性", f"{df.notna().sum().sum() / df.size * 100:.1f}%")
+
+    st.markdown("---")
+
+    # 数据预览
+    st.subheader("原始数据预览")
+    st.dataframe(df, use_container_width=True)
+
+    st.markdown("---")
+
+    # 数据统计
+    st.subheader("数据统计")
+    st.dataframe(df.describe(), use_container_width=True)
+
+    st.markdown("---")
+
+    # 数据类型
+    st.subheader("数据类型")
+    col_types = pd.DataFrame({
+        '列名': df.columns,
+        '数据类型': df.dtypes.values,
+        '缺失值': df.isnull().sum().values,
+        '唯一值': [df[col].nunique() for col in df.columns]
+    })
+    st.dataframe(col_types, use_container_width=True)
+
+# ==================== 主函数 ====================
+
+def main():
+    """主函数"""
+
+    # 侧边栏
+    uploaded_file = sidebar()
+
+    st.sidebar.markdown("---")
+
+    # 页面导航
+    st.sidebar.subheader("📱 页面导航")
+    page_options = [
+        "🏠 主页",
+        "📊 数据分析",
+        "🤖 模型评估",
+        "🧠 高级模型",
+        "📄 报告生成",
+        "📋 数据概览"
+    ]
+
+    if uploaded_file is not None:
+        selected_page = st.sidebar.radio("", page_options)
+
+        # 加载和处理数据
+        with st.spinner("正在加载数据..."):
+            df = load_data(uploaded_file)
+
+        if df is not None:
+            df_enhanced = process_data(df)
+
+            # 训练模型（如果需要）
+            predictor = None
+            if selected_page in ["🤖 模型评估", "📄 报告生成"]:
+                with st.spinner("正在训练模型..."):
+                    predictor = train_model(df_enhanced)
+
+            # 显示页面
+            if selected_page == "🏠 主页":
+                main_page(df, df_enhanced, predictor)
+            elif selected_page == "📊 数据分析":
+                data_analysis_page(df, df_enhanced)
+            elif selected_page == "🤖 模型评估":
+                model_evaluation_page(df_enhanced, predictor)
+            elif selected_page == "🧠 高级模型":
+                advanced_models_page(df, df_enhanced)
+            elif selected_page == "📄 报告生成":
+                report_generation_page(df, df_enhanced, predictor)
+            elif selected_page == "📋 数据概览":
+                data_overview_page(df)
+    else:
+        st.sidebar.info("👈 请先上传或选择数据文件")
+        st.markdown("""
+        # 欢迎使用 🦞 智虾系统
+
+        ## 功能特点
+
+        - 📊 **完整的数据分析**：FCR、SGR、环境参数
+        - 🤖 **机器学习预测**：产量预测、特征重要性
+        - 📄 **自动报告生成**：Word 报告一键导出
+        - 🚨 **智能预警**：环境压力三级预警
+
+        ## 使用步骤
+
+        1. 👈 在侧边栏上传数据文件（.xlsx 或 .csv）
+        2. 选择功能页面开始分析
+        3. 查看结果并导出报告
+
+        ## 技术支持
+
+        - SmartShrimp Team
+        - SmartShrimp Team
+        """)
+
+if __name__ == '__main__':
     main()

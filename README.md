@@ -1,219 +1,137 @@
-# PolicyPilot：企业政策申报准备度诊断 AI Agent
+# SmartShrimp OpenClaw
 
-PolicyPilot 是一个面向中小企业、园区和企业服务机构的政策申报前置初筛原型。系统基于公开政策文本、脱敏公示样例和可解释评分规则，帮助企业判断：
+**智虾系统** 是一个面向 OpenClaw 养虾挑战赛的智能养殖管理原型。系统用 Kaggle 虾体测量数据、行业成本参数和仿真养殖场景演示水质监控、投喂优化、增氧控制、疾病预警、产量预测、自动日志和成本收益分析。
 
-```text
-能申报什么政策 → 为什么匹配 → 缺什么材料 → 风险在哪里 → 如何补齐 → 生成申报书初稿
-```
+> 公开仓库口径：这是研究/竞赛原型，不是生产级自动化养殖控制系统。项目中的决策验证主要来自仿真场景和样例数据；真实虾塘部署需要传感器校准、设备联调和现场安全策略。
 
-核心定位：**不是直接预测官方审批结果，而是评估企业当前材料状态下的申报准备度。**
+## 功能
 
----
+| 模块 | 内容 |
+|---|---|
+| 数据分析 | FCR、SGR、环境压力指数、异常检测、趋势分析 |
+| 预测建模 | Random Forest、Gradient Boosting、模型对比、可解释性分析 |
+| 智能决策 | 水质告警、投喂建议、增氧/换水建议、疾病风险提示 |
+| 可视化 | Streamlit Web 界面、实时监控大屏、决策过程可视化 |
+| 报告 | Word/Markdown/HTML 报告生成、投资收益测算 |
+| OpenClaw 技能 | 8 个核心技能定义见 [SKILL.md](SKILL.md) |
 
-## 1. 核心功能
-
-- 企业画像抽取：地区、行业、团队规模、营收、研发投入、知识产权、Demo/试点等。
-- 政策库加载：支持公开来源政策库、模拟政策库和用户上传 PDF/TXT。
-- 政策库洞察：支持城市对比、申报窗口倒计时、官方来源/核验状态统计和数据质量检查。
-- 轻量 RAG 检索：从政策条款中检索匹配依据。
-- 申报准备度评分：区域匹配、行业匹配、资格条件、材料完备度、证据强度、风险扣分。
-- 材料缺口识别：判断营业执照、项目计划书、合同、预算、财务报表、知识产权等是否覆盖。
-- 风险提示：输出高/中/低风险和补齐建议。
-- 申报书初稿：生成项目背景、技术路线、创新点、商业价值、社会效益等。
-- 报告导出：Markdown、JSON、CSV。
-
----
-
-## 2. 快速运行
+## 快速开始
 
 ```bash
-cd policypilot_ai_agent
+git clone <your-repo-url>
+cd smart-shrimp-openclaw
 python -m venv .venv
-source .venv/bin/activate  # Windows: .venv\Scripts\activate
+source .venv/bin/activate        # Windows: .venv\Scripts\activate
 pip install -r requirements.txt
+```
+
+运行命令行演示：
+
+```bash
+python run.py
+```
+
+启动 Web 界面：
+
+```bash
 streamlit run app.py
 ```
 
-打开 Streamlit 页面后，选择默认的 **公开来源政策库（推荐）**，直接点击“开始分析”即可演示。
-
----
-
-## 3. 命令行 Demo
-
-公开来源政策库 Demo：
+启动实时监控大屏：
 
 ```bash
-python cli_demo_public.py
+streamlit run dashboard.py
 ```
 
-模拟政策库 Demo：
+启动决策过程可视化：
 
 ```bash
-python cli_demo.py
+streamlit run src/decision_visualizer.py --server.port 8502
 ```
 
-运行后会生成：
+高级模型功能需要额外依赖：
 
-```text
-outputs/analysis_report.md
-outputs/analysis_report.json
-outputs/application_draft.md
-outputs/material_checklist.md
-outputs/product_intro.md
-outputs/faq.md
-outputs/policy_results.csv
+```bash
+pip install -r requirements-advanced.txt
 ```
 
----
+## Docker
 
-## 4. 数据口径
-
-本项目包含两类数据。
-
-### 公开来源数据
-
-```text
-data/public_policies.json
-data/public_source_catalog.csv
-data/public_outcome_cases_desensitized.csv
-data/desensitization_rules.json
-data/known_enterprises.json
-reference_repos/opc-policy/data/policies.json
+```bash
+docker compose -f docker/docker-compose.yml up --build
 ```
 
-说明：公开政策文本和公开公示/公告来源是真实公开来源；脱敏 outcome 样例只保留 case_id、地区、政策 ID、主体类型和公示结果标签，不保留企业实名、统一社会信用代码、联系方式、合同金额、财务数据或申报书原文。`known_enterprises.json` 是知名企业基础画像兜底表，当前覆盖 98 个常见国内大厂及 162 个别名，用于避免地区、行业和企业类型被材料中的客户行业或泛化描述误判。`reference_repos/opc-policy` 为第三方 MIT 开源参考项目 [opcgate/opc-policy](https://github.com/siuserxiaowei/opc-policy)，系统可将其结构化政策库转换为本项目的 Policy 格式用于演示。
+服务启动后访问 `http://localhost:8501`。
 
-### 演示模拟数据
-
-```text
-data/sample_policies.json
-data/sample_companies.json
-data/labeled_eval_cases.csv
-data/scoring_rubric.csv
-```
-
-说明：用于演示产品流程和规则校准思路，不代表政府内部审批数据。
-
-详见：
+## 项目结构
 
 ```text
-docs/DATA_AND_SCORING.md
-docs/PUBLIC_DATASET_NOTES.md
-docs/DATASET_EXPANSION_AND_DESENSITIZATION.md
-docs/COMPANY_INPUT_GUIDE.md
-DISCLAIMER.md
-```
-
----
-
-## 5. 评分逻辑
-
-系统采用可解释规则基线：
-
-```text
-总分 = 区域匹配 + 行业匹配 + 资格条件 + 材料完备度 + 证据强度 - 风险扣分
-```
-
-分数解释：
-
-| 分数 | 标签 | 含义 |
-|---:|---|---|
-| 80–100 | 强匹配：建议优先申报 | 区域、行业、资格、材料和证据较完整 |
-| 65–79 | 中高匹配：补齐材料后申报 | 方向匹配，但材料或证据仍有缺口 |
-| 45–64 | 弱匹配：需要进一步论证 | 有相关性，但不适合直接申报 |
-| 0–44 | 暂不建议：匹配度较低 | 核心条件不满足或缺口明显 |
-
----
-
-## 6. 项目结构
-
-```text
-policypilot_ai_agent/
-├── app.py                         # Streamlit 前端
-├── cli_demo.py                    # 模拟政策库命令行 Demo
-├── cli_demo_public.py             # 公开来源政策库命令行 Demo
-├── requirements.txt
-├── .env.example
-├── .gitignore
-├── LICENSE
-├── DISCLAIMER.md
-├── GITHUB_READY.md
-├── data/
-│   ├── public_policies.json
-│   ├── public_source_catalog.csv
-│   ├── public_outcome_cases_desensitized.csv
-│   ├── desensitization_rules.json
-│   ├── known_enterprises.json
-│   ├── sample_policies.json
-│   ├── sample_companies.json
-│   ├── scoring_rubric.csv
-│   └── labeled_eval_cases.csv
-├── docs/
-│   ├── PRODUCT_SPEC.md
-│   ├── ARCHITECTURE.md
-│   ├── DEMO_SCRIPT.md
-│   ├── DATA_AND_SCORING.md
-│   ├── PUBLIC_DATASET_NOTES.md
-│   ├── EVALUATION_RUBRIC.md
-│   ├── RESUME_BULLET.md
-│   └── ROADMAP.md
-├── examples/
-│   ├── generated_outputs/
-│   └── public_generated_outputs/
+.
+├── app.py                         # Streamlit 主界面
+├── dashboard.py                   # 实时监控大屏
+├── run.py                         # 命令行入口
+├── enhanced_demo.py               # 增强演示入口
+├── start.py                       # 一键启动脚本
+├── data/                          # 样例数据和数据处理脚本
 ├── src/
-│   ├── company_parser.py
-│   ├── generator.py
-│   ├── llm.py
-│   ├── matcher.py
-│   ├── models.py
-│   ├── policy_insights.py
-│   ├── policy_loader.py
-│   ├── report.py
-│   ├── retriever.py
-│   └── utils.py
-└── tests/
-    └── test_core.py
+│   ├── agent/                     # OpenClaw 智能体与技能管理
+│   ├── advanced/                  # 高级模型、融合、解释、强化学习模块
+│   ├── professional_analyzer.py   # 核心分析流程
+│   └── roi_calculator.py          # 成本收益测算
+├── scripts/                       # 图表和样例数据生成脚本
+├── reports/                       # 已保留的实验结果 JSON 和示例图表
+├── docs/                          # 技术文档、竞赛文章公开版和资产
+├── config/                        # 配置模板
+└── docker/                        # Dockerfile 和 Compose 配置
 ```
 
----
+## 数据与指标口径
 
-## 7. 使用 OpenAI API（可选）
+项目采用三类数据：
 
-默认使用本地规则和模板，不需要 API Key。若要启用大模型改写申报书：
+1. **Kaggle 虾体测量数据**：324 条虾体重量、长度、体积等真实测量数据，用于生物学基准。
+2. **行业成本数据**：来自公开论文资料整理，用于 ROI 和成本收益测算。
+3. **仿真养殖场景数据**：基于真实数据基准和养殖学公式生成，用于测试 OpenClaw 决策流程。
+
+公开版默认采用保守表述：产量预测和 ROI 结果按实验/仿真口径解释。`reports/*.json` 中保留了不同实验设置下的模型结果；不要把增强仿真场景中的高 R² 直接解释为真实生产泛化性能。详细说明见 [docs/DATA_AND_METRICS.md](docs/DATA_AND_METRICS.md)。
+
+## 常用命令
+
+```bash
+# 静态检查：编译所有 Python 文件
+python -m compileall .
+
+# 生成四张报告图
+python scripts/generate_4_charts.py
+
+# 生成样例数据
+python scripts/generate_sample_data.py
+
+# 投资收益演示
+python enhanced_demo.py
+```
+
+## 配置
+
+复制配置模板：
 
 ```bash
 cp .env.example .env
-# 编辑 .env，填写 OPENAI_API_KEY
-streamlit run app.py
 ```
 
-环境变量：
+OpenClaw/大模型服务配置模板位于 `config/openclaw.example.json`。该文件只保留占位符，不包含真实密钥。
 
-```text
-OPENAI_API_KEY=
-OPENAI_MODEL=gpt-4o-mini
-```
+样例数据说明见 [data/README.md](data/README.md)，实验结果说明见 [reports/README.md](reports/README.md)。
 
-`.env` 已被 `.gitignore` 排除，不能提交到公开仓库。
+## 文档
 
----
+- [docs/README.md](docs/README.md)：文档索引
+- [docs/DATA_AND_METRICS.md](docs/DATA_AND_METRICS.md)：数据来源和指标口径
+- [docs/competition_article_public.md](docs/competition_article_public.md)：参赛文章公开版
+- [docs/PUBLIC_RELEASE.md](docs/PUBLIC_RELEASE.md)：公开发布整理说明
+- [docs/DOCKER.md](docs/DOCKER.md)：Docker 部署说明
+- [docs/ADVANCED_MODELS.md](docs/ADVANCED_MODELS.md)：高级模型说明
 
-## 8. 测试
+## License
 
-```bash
-PYTHONPATH=. pytest -q
-```
-
-测试覆盖企业画像抽取、公开政策匹配、材料生成和大厂/中小企业边界识别。
-
----
-
-## 9. 产品一句话
-
-> PolicyPilot 面向中小企业、园区和企业服务机构，基于官方公开政策文本和企业画像，自动完成政策匹配、申报准备度评分、材料缺口识别、风险提示和申报书初稿生成，帮助企业在正式申报前判断“能不能报、缺什么、风险在哪、怎么补”。
-
----
-
-## 10. 简历表述
-
-> 构建 PolicyPilot 企业政策申报准备度诊断 AI Agent，支持公开政策文本加载、企业画像抽取、政策条款检索、五维规则评分、材料缺口识别、风险提示与申报书初稿生成。系统采用轻量 RAG 和可解释规则基线，支持 Streamlit 交互式前端、Markdown/JSON/CSV 报告导出，可用于政企数字化、园区企业服务和中小企业政策申报辅助场景。
+当前公开包未擅自改成开源授权，默认保留全部权利。若要正式开源，可将 `LICENSE` 替换为 MIT、Apache-2.0 或其他许可证。
