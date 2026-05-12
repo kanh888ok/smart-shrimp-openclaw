@@ -186,7 +186,8 @@ def sidebar():
 
     upload_option = st.sidebar.radio(
         "选择数据源",
-        ["上传文件", "使用示例数据"]
+        ["上传文件", "使用示例数据"],
+        index=1
     )
 
     if upload_option == "上传文件":
