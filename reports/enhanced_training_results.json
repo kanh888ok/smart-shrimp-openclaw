@@ -1,0 +1,20 @@
+{
+  "data_used": "Enhanced (230 samples)",
+  "training_time_minutes": 0.0038541873296101888,
+  "best_model": {
+    "model": "RandomForest_Enhanced",
+    "r2": 0.9863598887090872,
+    "mae": 27.0760271307313,
+    "rmse": 34.583907870125145,
+    "training_time": 0.16204404830932617
+  },
+  "all_results": [
+    {
+      "model": "RandomForest_Enhanced",
+      "r2": 0.9863598887090872,
+      "mae": 27.0760271307313,
+      "rmse": 34.583907870125145,
+      "training_time": 0.16204404830932617
+    }
+  ]
+}

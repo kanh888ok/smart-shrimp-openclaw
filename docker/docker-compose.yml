@@ -1,0 +1,39 @@
+version: '3.8'
+
+services:
+  # Streamlit Dashboard
+  dashboard:
+    build:
+      context: ..
+      dockerfile: docker/Dockerfile
+    container_name: shrimp-farming-dashboard
+    ports:
+      - "8501:8501"
+    volumes:
+      - ../data:/app/data
+      - ../reports:/app/reports
+      - ../logs:/app/logs
+    environment:
+      - TZ=Asia/Shanghai
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8501/_stcore/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 5s
+
+  # （可选）添加数据库服务
+  # db:
+  #   image: postgres:13
+  #   container_name: shrimp-farming-db
+  #   environment:
+  #     POSTGRES_DB: shrimp_farming
+  #     POSTGRES_USER: admin
+  #     POSTGRES_PASSWORD: password
+  #   volumes:
+  #     - postgres_data:/var/lib/postgresql/data
+  #   restart: unless-stopped
+
+# volumes:
+#   postgres_data:

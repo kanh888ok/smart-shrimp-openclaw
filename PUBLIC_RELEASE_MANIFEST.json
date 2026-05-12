@@ -1,0 +1,13 @@
+{
+  "name": "smart-shrimp-openclaw",
+  "public_release": true,
+  "source_zip": "openclaw_养虾挑战赛.zip",
+  "sanitized": [
+    "credentials replaced with placeholders",
+    "private cloud/server screenshots excluded",
+    "personal/team identifiers generalized in text files",
+    "draft archive and generated DOCX report excluded",
+    "runtime caches removed"
+  ],
+  "metric_policy": "metrics are experiment/simulation results unless separately validated on real production-cycle data"
+}

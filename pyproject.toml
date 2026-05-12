@@ -1,0 +1,14 @@
+[project]
+name = "smart-shrimp-openclaw"
+version = "0.1.0"
+description = "SmartShrimp aquaculture management prototype for OpenClaw shrimp farming challenge"
+readme = "README.md"
+requires-python = ">=3.9"
+license = { text = "All rights reserved" }
+
+[tool.pytest.ini_options]
+pythonpath = ["."]
+
+[tool.black]
+line-length = 100
+target-version = ["py39"]
