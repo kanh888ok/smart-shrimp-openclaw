@@ -1,0 +1,15 @@
+{
+  "model": "Ensemble_5Models",
+  "r2": 0.8321847182687132,
+  "mae": 78.21552740486169,
+  "rmse": 111.98033874664722,
+  "training_time": 4.456959962844849,
+  "base_models": [
+    "RandomForest",
+    "XGBoost",
+    "LightGBM",
+    "GradientBoosting",
+    "Ridge"
+  ],
+  "timestamp": "2026-03-20T18:31:34.595408"
+}

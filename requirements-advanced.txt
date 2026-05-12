@@ -1,0 +1,16 @@
+# Optional dependencies for advanced modeling modules.
+-r requirements.txt
+
+xgboost>=2.0.0
+lightgbm>=4.0.0
+torch>=2.0.0
+torchvision>=0.15.0
+transformers>=4.35.0
+prophet>=1.1.0
+statsmodels>=0.14.0
+pmdarima>=2.0.0
+optuna>=3.0.0
+shap>=0.42.0
+gymnasium>=0.29.0
+stable-baselines3>=2.0.0
+kaggle>=1.6.0

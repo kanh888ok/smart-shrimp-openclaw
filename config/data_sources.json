@@ -1,0 +1,65 @@
+{
+  "weather_api": {
+    "enabled": true,
+    "source": "openweather",
+    "api_key": "YOUR_API_KEY_HERE",
+    "location": {
+      "name": "杭州",
+      "lat": 30.27,
+      "lon": 120.16,
+      "timezone": "Asia/Shanghai"
+    },
+    "notes": "从 https://openweathermap.org/api 获取免费API key"
+  },
+  "water_quality_api": {
+    "enabled": false,
+    "source": "local_sensor",
+    "endpoint": "http://localhost:8000/api/sensor",
+    "notes": "需要连接真实的物联网传感器"
+  },
+  "historical_data": {
+    "enabled": true,
+    "source": "research_paper",
+    "path": "data/historical_farming_data.csv",
+    "papers": [
+      {
+        "title": "对虾养殖环境因子与生长性能关系研究",
+        "source": "水产学报",
+        "year": "2024"
+      },
+      {
+        "title": "Data on shrimp farming in China",
+        "source": "FAO Statistics",
+        "url": "https://www.fao.org/fishery/statistics"
+      }
+    ]
+  },
+  "kaggle_datasets": {
+    "enabled": false,
+    "datasets": [
+      "aquaculture-farming-data",
+      "shrimp-farming-dataset"
+    ],
+    "notes": "需要安装kaggle-cli并配置API key"
+  },
+  "real_sensor_data": {
+    "enabled": false,
+    "hardware": [
+      {
+        "type": "DO传感器",
+        "model": "Optical DO Sensor",
+        "protocol": "RS485/Modbus"
+      },
+      {
+        "type": "温度传感器",
+        "model": "DS18B20",
+        "protocol": "1-Wire"
+      },
+      {
+        "type": "pH传感器",
+        "model": "pH-Electrode",
+        "protocol": "Analog 4-20mA"
+      }
+    ]
+  }
+}

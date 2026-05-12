@@ -1,0 +1,8 @@
+{
+  "model": "Optimized_RandomForest",
+  "r2": 0.8070632469853087,
+  "training_time": 0.07487106323242188,
+  "optimization_method": "Optuna_TPE",
+  "n_trials": 30,
+  "timestamp": "2026-03-20T18:31:34.686846"
+}
